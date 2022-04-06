@@ -1,3 +1,6 @@
+
+//test ultrasound
+
 #include <Arduino.h> // remove if using arduino IDE. used for platform IO on VS code#include <Arduino.h> // remove if using arduino IDE. used for platform IO on VS code
 
 #define DOOROPENTIME 3000 //in milliseconds
