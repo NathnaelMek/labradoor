@@ -13,18 +13,24 @@
 #define BUTTON 21
 #define NUM_MODES 5
 
-#define STATUS_LED_
+#define STATUS_LED_INSIDE 18 
+#define STATUS_LED_OUTSIDE 19
+
 boolean isDoorOpen = false; // door will be closed at first
 boolean presenseDetected; // see if there is omething ifront of the gate. to wake up from deep sleep
 
+// lock states
+boolean insideLock; 
+boolean outsideLock;
+
 unsigned long startMillis;
 unsigned long currentMillis;
-const unsigned long period  = 40000;
+const unsigned long period  = 15000;
 
 /* modes
-    1 unlocked  : both locks are unlocked and door is open. 
+    1 unlocked  : both locks are unlocked and door is open.s 
     2 locked : both locks are locked
-    3 inside lock
+    3 inside lock : pet cant go inside. only go outside
     4 outside lock
     5 auto lock : always locked. open if pet is near by
     6 auto lock + weather : always locked (streatch goal)
@@ -42,29 +48,45 @@ void setup() {
   pinMode(17,OUTPUT);  // Servo 2 input A2
   pinMode(BUTTON, INPUT_PULLUP);
   pinMode(HALL_SENSOR, INPUT);
+  pinMode(STATUS_LED_INSIDE, OUTPUT);
+  pinMode(STATUS_LED_OUTSIDE, OUTPUT);
   BLEDevice::init("ESP32_labradoor");
   currentMode = 1;
+  unlockInside();
+  unlockInside();
+  Serial.print ("{LCD} : boot complete. \n\tmode :  ");
+  Serial.println (modeNames[currentMode-1]);
+
 
 }
 
 
 void unlockInside(){
- // perform unlocking motion
+  insideLock = false;
+  digitalWrite(STATUS_LED_INSIDE, LOW);
+  
+ // perform locking motion on the servo
  // reach goal :  then cut power of the servo to save battery
 }
 
 void lockInside(){
-  // perform locking motion
+  insideLock = true;
+  digitalWrite(STATUS_LED_INSIDE, HIGH);
+  // perform locking motion on the servo
  // reach goal :  then cut power of the servo to save battery
 }
 
 void unlockOutside(){
- // perform unlocking motion
+  outsideLock = false;
+  digitalWrite(STATUS_LED_OUTSIDE, LOW);
+ // perform locking motion on the servo
  // reach goal :  then cut power of the servo to save battery
 }
 
 void lockOutside(){
-  // perform locking motion
+  outsideLock = true;
+  digitalWrite(STATUS_LED_OUTSIDE, HIGH);
+  // perform locking motion on the servo
  // reach goal :  then cut power of the servo to save battery
 }
 
@@ -74,14 +96,13 @@ bool isAtEquilibrium(){
    
     while (digitalRead(HALL_SENSOR) == HIGH)
     {
-        //loop for 3
+        //loop for 3 seonds
     }
+
+    return false;
         
     
 }
-
-
-
 
 //checks if the dog tag is near the door
 bool checkBleTag(){ 
@@ -95,7 +116,7 @@ bool checkBleTag(){
     String tag_name = device.getName().c_str();
     if (tag_name.equals(BLE_TAG_NAME) ) {
       delay(100);
-      Serial.print("detected dog tag. signal strength : " );
+      Serial.print("tag signal strength : " );
       Serial.println(rssi);
 
       // check how stron the bluetooth signal is. we want to trigger the gate when the signal is "strong" enough
@@ -118,7 +139,7 @@ void modeButtonPressed(){
   Serial.println ("modeButtonPressed() : wake LCD");
   Serial.print ("{LCD} : ");
   Serial.println (modeNames[currentMode-1]);
-  Serial.println ("30 second timer loop started");
+  Serial.println ("15 second timer loop started");
   
   while(digitalRead(BUTTON) == LOW){
     ;// wait until the button press is released
@@ -158,31 +179,70 @@ void modeButtonPressed(){
 
 void loop() {
 
+  // use mode button and presence sensor to wake ep32 from deepsleep once it is implemented
+
   if(digitalRead(BUTTON) == LOW)
     modeButtonPressed();
-
   
-
-/*  
-  // check what mode is   
+  // check what mode is selected and perform action   
   switch(currentMode){
 
-    case 0 :
+    case 1 : // unlocked mode
+      if(insideLock)
+          unlockInside();
+      
+      if(outsideLock)
+        unlockOutside();
 
     break;
-    case 1 :
+    case 2 :  // locked mode
+      if(!insideLock)
+        lockInside();
+      
+      if(!outsideLock)
+        lockOutside();
 
     break;
-    case 2 :
+    case 3 :  // inside lock mode
+      if(!insideLock)
+        lockInside();
+      
+      if(outsideLock)
+        unlockOutside();
+    break;
+    case 4 :  // outside lock mode
+      if(insideLock)
+       unlockInside();
+      
+      if(!outsideLock)
+        lockOutside();
+    break;
+    case 5 :  // auto mode
+      // check presence of pet tag
+      if(checkBleTag()){
+        Serial.println("{auto} : tag detected and authorized");
+
+        // unlock door
+        unlockInside();
+        unlockOutside();    
+
+        // wait for 5 seconds so that dog can pass through
+        delay(5000);
+        // the check for door equilibrim
+        //while(!isAtEquilibrium()){
+
+        //}
+
+        // lock door
+        lockInside();
+        lockOutside();
+        
+      }
+
+
 
     break;
-    case 3 :
-
-    break;
-    case 4 :
-
-    break;
-    case 5 :
+    case 6 :  // auto + weather mode
 
     break;
     
@@ -192,5 +252,5 @@ void loop() {
 
 
   
-  } */
+  } 
 }
