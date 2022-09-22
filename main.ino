@@ -6,38 +6,44 @@
 #define DOOROPENTIME 3000 //in milliseconds
 #define DOORDELAY 2000 // milliseconds
 #define BLE_TAG_NAME "Labradoor tag 1"
-#define CUTOFF 80 // how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
+#define CUTOFF 80 // in -db for how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
 #define INSIDE_LOCK 14
 #define OUTSIDE_LOCK 13
 #define HALL_SENSOR 11
-#define BUTTON 16
+#define BUTTON 21
+#define NUM_MODES 5
 
 #define STATUS_LED_
 boolean isDoorOpen = false; // door will be closed at first
 boolean presenseDetected; // see if there is omething ifront of the gate. to wake up from deep sleep
 
+unsigned long startMillis;
+unsigned long currentMillis;
+const unsigned long period  = 40000;
 
 /* modes
     1 unlocked  : both locks are unlocked and door is open. 
     2 locked : both locks are locked
     3 inside lock
     4 outside lock
-    5 smart lock : always locked.
-    6 smart lock + weather : always locked (streatch goal)
+    5 auto lock : always locked. open if pet is near by
+    6 auto lock + weather : always locked (streatch goal)
 */
-int currentMode =  0;
+int currentMode;
+String modeNames [] = {"unlocked", "locked", "inside lock", "outside lock", "auto lock", "auto + weather"};
 
 
 
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(9600);
+  Serial.begin(115200);
   pinMode(16,OUTPUT); // servo 1 input A1
   pinMode(17,OUTPUT);  // Servo 2 input A2
-  pinMode(2, OUTPUT);
+  pinMode(BUTTON, INPUT_PULLUP);
   pinMode(HALL_SENSOR, INPUT);
   BLEDevice::init("ESP32_labradoor");
+  currentMode = 1;
 
 }
 
@@ -104,17 +110,60 @@ bool checkBleTag(){
   return false;
 }
 
-void checkModeChange(){
-    // check if button is pressed short, long or any at all
 
+// be able to cycle trough the modes with one button
+void modeButtonPressed(){
+  // "wake lcd"
+  startMillis = millis();
+  Serial.println ("modeButtonPressed() : wake LCD");
+  Serial.print ("{LCD} : ");
+  Serial.println (modeNames[currentMode-1]);
+  Serial.println ("30 second timer loop started");
+  
+  while(digitalRead(BUTTON) == LOW){
+    ;// wait until the button press is released
+  }
+  while(true){
+    currentMillis = millis();
+    delay(10); // for improved performance. neglagible delay
+    
+    // if button is pressed again before the timer ends, cycle to the next choice and add 3 seconds
+    if(digitalRead(BUTTON) == LOW){
+      // wait for button release
+      while(digitalRead(BUTTON) == LOW){
+        //Serial.println ("let go of the button!");
+      }
+      if(currentMode == NUM_MODES){
+        currentMode = 1;
+      }else{
+        currentMode = (currentMode + 1);
+      }
+      Serial.print ("{LCD} : ");
+      Serial.println (modeNames[currentMode-1]);
+    }
 
+    if ((currentMillis - startMillis) >= period)  //test whether the period has elapsed
+    {
+      
+      Serial.print ("{LCD} : ");
+      Serial.println (modeNames[currentMode-1]);
+      Serial.println("timer ends. close LCD");
+      return;
+    }
+
+  }
 }
 
 
 
 void loop() {
 
+  if(digitalRead(BUTTON) == LOW)
+    modeButtonPressed();
+
   
+
+/*  
   // check what mode is   
   switch(currentMode){
 
@@ -143,5 +192,5 @@ void loop() {
 
 
   
-  } 
+  } */
 }
