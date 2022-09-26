@@ -16,7 +16,12 @@
 #define STATUS_LED_INSIDE 18 
 #define STATUS_LED_OUTSIDE 19
 
-boolean isDoorOpen = false; // door will be closed at first
+/*
+ store currentMode, insidelock and outside lock in the static ram ,
+which is part of the real-time-clock (RTC)if esp goes to deep sleep.
+ becuase deep sleep erases data from RAM and anything we want to preserve neeeds to be in 
+*/
+
 boolean presenseDetected; // see if there is omething ifront of the gate. to wake up from deep sleep
 
 // lock states
@@ -25,7 +30,7 @@ boolean outsideLock;
 
 unsigned long startMillis;
 unsigned long currentMillis;
-const unsigned long period  = 15000;
+const unsigned long period  = 5000;// 5 seconds
 
 /* modes
     1 unlocked  : both locks are unlocked and door is open.s 
@@ -116,7 +121,7 @@ bool checkBleTag(){
     String tag_name = device.getName().c_str();
     if (tag_name.equals(BLE_TAG_NAME) ) {
       delay(100);
-      Serial.print("tag signal strength : " );
+      //Serial.print("tag signal strength : " );
       Serial.println(rssi);
 
       // check how stron the bluetooth signal is. we want to trigger the gate when the signal is "strong" enough
@@ -150,17 +155,24 @@ void modeButtonPressed(){
     
     // if button is pressed again before the timer ends, cycle to the next choice and add 3 seconds
     if(digitalRead(BUTTON) == LOW){
-      // wait for button release
+        // wait for button release
       while(digitalRead(BUTTON) == LOW){
-        //Serial.println ("let go of the button!");
+        ;// wait until the button press is released
       }
-      if(currentMode == NUM_MODES){
-        currentMode = 1;
-      }else{
-        currentMode = (currentMode + 1);
-      }
-      Serial.print ("{LCD} : ");
-      Serial.println (modeNames[currentMode-1]);
+        // if button is pressed
+        startMillis = millis();
+        delay(10);
+        currentMillis = millis();
+        Serial.println("timer reset");
+        
+        
+        if(currentMode == NUM_MODES){
+          currentMode = 1;
+        }else{
+          currentMode = (currentMode + 1);
+        }
+        Serial.print ("{LCD} : ");
+        Serial.println (modeNames[currentMode-1]);
     }
 
     if ((currentMillis - startMillis) >= period)  //test whether the period has elapsed
