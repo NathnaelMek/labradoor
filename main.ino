@@ -106,30 +106,28 @@ bool isAtEquilibrium(){
 
     return false;
 
+}
+/*
 void isAtEquilibirum()
 {
   int doorcheckcount;
   bool laststage;
   //loop
   bool thisstage =  (digitalRead(HALL_SENSOR);
-  if laststage != thisstage; // if door is swiching 
+  if (laststage != thisstage); // if door is swiching 
     {
       laststage = thisstage;
       startMillis = millis();
 
     }   
-  if (laststage == HIGH && millies()- startMillis>= 2000 ){ // do is stable 
+  if (laststage == HIGH && millis()- startMillis>= 2000 ){ // do is stable 
     //can perform lock here 
   }
 
   return true;
-    }
+}*/
 
 
-}
-        
-    
-}
 
 //checks if the dog tag is near the door
 bool checkBleTag(){ 
