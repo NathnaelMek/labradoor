@@ -12,6 +12,7 @@
 #define HALL_SENSOR 11
 #define BUTTON 21
 #define NUM_MODES 5
+#define SPEAKER 6
 
 #define STATUS_LED_INSIDE 18 
 #define STATUS_LED_OUTSIDE 19
@@ -98,34 +99,20 @@ void lockOutside(){
 bool isAtEquilibrium(){
     // checks with the hall sensor to see if gate is in equiibrium position
     // wait for 3 seconds before declaring the the door is not swinging
-   
+    unsigned long start = millis();
+    unsigned long current = millis();
     while (digitalRead(HALL_SENSOR) == HIGH)
     {
+      current = millis();
+      delay(10);
+      if((current - start) > 3000)
+        return true;
         //loop for 3 seonds
     }
 
     return false;
 
 }
-/*
-void isAtEquilibirum()
-{
-  int doorcheckcount;
-  bool laststage;
-  //loop
-  bool thisstage =  (digitalRead(HALL_SENSOR);
-  if (laststage != thisstage); // if door is swiching 
-    {
-      laststage = thisstage;
-      startMillis = millis();
-
-    }   
-  if (laststage == HIGH && millis()- startMillis>= 2000 ){ // do is stable 
-    //can perform lock here 
-  }
-
-  return true;
-}*/
 
 
 
@@ -228,11 +215,28 @@ void loop() {
 
     break;
     case 2 :  // locked mode
-      if(!insideLock)
-        lockInside();
+      if(!insideLock || !outsideLock){
+        if(isAtEquilibrium()){
+          if(!outsideLock){
+            lockOutside();
+          }  
+          if(!outsideLock){
+            lockOutside();
+          }  
+        }
+          
+      }else{
+        // check unlikely case where the locks are locked but the door flap is not where it should be (not in betwwen the locks)
+        if(digitalRead(HALL_SENSOR) == LOW){
+          // hall sensor is not triggered
+          //makeNoise
+          Serial.println();
+        }
+
+      }
+        
       
-      if(!outsideLock)
-        lockOutside();
+
 
     break;
     case 3 :  // inside lock mode
