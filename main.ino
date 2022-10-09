@@ -1,27 +1,48 @@
+/*
+ when deep sleeping to save power: store currentMode, insidelock and outside lock in the static ram ,
+which is part of the real-time-clock (RTC)if esp goes to deep sleep.
+ becuase deep sleep erases data from RAM and anything we want to preserve neeeds to be in 
+*/
+
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <cstdlib>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <ESP32Servo.h>
 
 #define DOOROPENTIME 3000 //in milliseconds
 #define DOORDELAY 2000 // milliseconds
 #define BLE_TAG_NAME "Labradoor tag 1"
-#define CUTOFF 80 // in -db for how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
+#define CUTOFF 70 // in -db for how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
 #define INSIDE_LOCK 14
 #define OUTSIDE_LOCK 13
 #define HALL_SENSOR 11
-#define BUTTON 21
+#define BUTTON 19
 #define NUM_MODES 5
-#define SPEAKER 6
+#define ECHO_USS 39
+#define TRIG_USS 34
+//#define OUTSIDE_SERVOPIN 18
+//#define INSIDE_SERVOPIN 23
 
-#define STATUS_LED_INSIDE 18 
-#define STATUS_LED_OUTSIDE 19
+#define SCREEN_WIDTH 128 // OLED width,  in pixels
+#define SCREEN_HEIGHT 64 // OLED height, in pixels
+// create an OLED display object connected to I2C
+Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-/*
- store currentMode, insidelock and outside lock in the static ram ,
-which is part of the real-time-clock (RTC)if esp goes to deep sleep.
- becuase deep sleep erases data from RAM and anything we want to preserve neeeds to be in 
-*/
+// create four servo objects 
+Servo servo_outside;
+Servo servo_inside;
+
+// Published values for SG90 servos; adjust if needed
+int minUs = 500;
+int maxUs = 2500;
+int OUTSIDE_SERVOPIN = 18;
+int INSIDE_SERVOPIN = 23;
+
+
 
 boolean presenseDetected; // see if there is omething ifront of the gate. to wake up from deep sleep
 
@@ -45,23 +66,37 @@ int currentMode;
 String modeNames [] = {"unlocked", "locked", "inside lock", "outside lock", "auto lock", "auto + weather"};
 
 
-
-
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  pinMode(16,OUTPUT); // servo 1 input A1
-  pinMode(17,OUTPUT);  // Servo 2 input A2
+  // initialize OLED display with I2C address 0x3C
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("failed to start SSD1306 OLED"));
+    while (1);
+  }
+
+  servo_inside.attach(INSIDE_SERVOPIN, minUs, maxUs);
+  servo_outside.attach(OUTSIDE_SERVOPIN, minUs, maxUs);
+	servo_outside.setPeriodHertz(50);      // Standard 50hz servo
+  servo_inside.setPeriodHertz(50);      // Standard 50hz servo
   pinMode(BUTTON, INPUT_PULLUP);
-  pinMode(HALL_SENSOR, INPUT);
-  pinMode(STATUS_LED_INSIDE, OUTPUT);
-  pinMode(STATUS_LED_OUTSIDE, OUTPUT);
+  pinMode(HALL_SENSOR, INPUT_PULLUP);
   BLEDevice::init("ESP32_labradoor");
   currentMode = 1;
   unlockInside();
   unlockInside();
-  Serial.print ("{LCD} : boot complete. \n\tmode :  ");
-  Serial.println (modeNames[currentMode-1]);
+
+  delay(2000);         // wait two seconds for initializing
+  oled.clearDisplay(); // clear display
+  oled.setTextColor(WHITE);    // set text color
+  oled.setCursor(0, 20);       // set position to display
+  oled.setTextSize(1); 
+  oled.print("boot complete.  \n\tmode :  "); // set text
+  oled.println(modeNames[currentMode-1]); // set text
+  oled.display();              // display on OLED
+  delay(2000);
+  oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
+
 
 
 }
@@ -69,7 +104,9 @@ void setup() {
 
 void unlockInside(){
   insideLock = false;
-  digitalWrite(STATUS_LED_INSIDE, LOW);
+	servo_inside.write(0);
+  delay(500);
+  
   
  // perform locking motion on the servo
  // reach goal :  then cut power of the servo to save battery
@@ -77,23 +114,38 @@ void unlockInside(){
 
 void lockInside(){
   insideLock = true;
-  digitalWrite(STATUS_LED_INSIDE, HIGH);
+  servo_inside.write(90);
+  delay(500);
+  
   // perform locking motion on the servo
  // reach goal :  then cut power of the servo to save battery
 }
 
 void unlockOutside(){
   outsideLock = false;
-  digitalWrite(STATUS_LED_OUTSIDE, LOW);
+  servo_outside.write(0);
+  delay(500);
  // perform locking motion on the servo
  // reach goal :  then cut power of the servo to save battery
 }
 
 void lockOutside(){
   outsideLock = true;
-  digitalWrite(STATUS_LED_OUTSIDE, HIGH);
+  servo_outside.write(90);
+  delay(500);
   // perform locking motion on the servo
  // reach goal :  then cut power of the servo to save battery
+}
+
+void OLED (String text, int size = 2, int x = 0, int y = 20){
+
+  oled.clearDisplay(); // clear display
+  oled.setTextColor(WHITE);    // set text color
+  oled.setCursor(x, y);       // set position to display
+  oled.setTextSize(size); 
+  oled.println(text); // set text
+  oled.display();              // display on OLED
+  delay(500);         // wait two seconds for initializing
 }
 
 bool isAtEquilibrium(){
@@ -101,12 +153,14 @@ bool isAtEquilibrium(){
     // wait for 3 seconds before declaring the the door is not swinging
     unsigned long start = millis();
     unsigned long current = millis();
-    while (digitalRead(HALL_SENSOR) == HIGH)
+    while (digitalRead(HALL_SENSOR) == LOW)
     {
       current = millis();
       delay(10);
-      if((current - start) > 3000)
+      if((current - start) > 3000){
+        Serial.println("at equilibrium!");
         return true;
+      }
         //loop for 3 seonds
     }
 
@@ -142,20 +196,29 @@ bool checkBleTag(){
   }
   return false;
 }
+void sleepDisplay(Adafruit_SSD1306* display) {
+  display->ssd1306_command(SSD1306_DISPLAYOFF);
+}
+
+void wakeDisplay(Adafruit_SSD1306* display) {
+  display->ssd1306_command(SSD1306_DISPLAYON);
+}
 
 
 // be able to cycle trough the modes with one button
 void modeButtonPressed(){
-  // "wake lcd"
-  startMillis = millis();
-  Serial.println ("modeButtonPressed() : wake LCD");
-  Serial.print ("{LCD} : ");
-  Serial.println (modeNames[currentMode-1]);
-  Serial.println ("15 second timer loop started");
+ 
+  oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
+  Serial.print ("{OLED screen} : "); // DEBUGGING
+  Serial.println (modeNames[currentMode-1]);// DEBUGGING
+  Serial.println ("5 second timer loop started");// DEBUGGING
+  OLED("MODE:\n" + modeNames[currentMode-1], 1);
   
   while(digitalRead(BUTTON) == LOW){
     ;// wait until the button press is released
   }
+  
+  startMillis = millis();
   while(true){
     currentMillis = millis();
     delay(10); // for improved performance. neglagible delay
@@ -170,7 +233,7 @@ void modeButtonPressed(){
         startMillis = millis();
         delay(10);
         currentMillis = millis();
-        Serial.println("timer reset");
+        Serial.println("timer reset");// DEBUGGING
         
         
         if(currentMode == NUM_MODES){
@@ -178,16 +241,24 @@ void modeButtonPressed(){
         }else{
           currentMode = (currentMode + 1);
         }
-        Serial.print ("{LCD} : ");
-        Serial.println (modeNames[currentMode-1]);
+        OLED (modeNames[currentMode-1]);
     }
 
     if ((currentMillis - startMillis) >= period)  //test whether the period has elapsed
     {
-      
-      Serial.print ("{LCD} : ");
-      Serial.println (modeNames[currentMode-1]);
-      Serial.println("timer ends. close LCD");
+      oled.clearDisplay(); // clear display
+      oled.setTextColor(WHITE);    // set text color
+      oled.setCursor(0, 20);       // set position to display
+      oled.setTextSize(1); 
+      oled.println ("mode selected : ");
+      oled.setTextSize(2); 
+      oled.println (modeNames[currentMode-1]);
+      oled.display();              // display on OLED
+      delay(1500);
+
+      //OLED("diplay shutting off", 1);
+      //delay(1000);
+      oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
       return;
     }
 
@@ -199,7 +270,8 @@ void modeButtonPressed(){
 void loop() {
 
   // use mode button and presence sensor to wake ep32 from deepsleep once it is implemented
-
+  servo_inside.attach(INSIDE_SERVOPIN, minUs, maxUs);
+  servo_outside.attach(OUTSIDE_SERVOPIN, minUs, maxUs);
   if(digitalRead(BUTTON) == LOW)
     modeButtonPressed();
   
@@ -208,7 +280,7 @@ void loop() {
 
     case 1 : // unlocked mode
       if(insideLock)
-          unlockInside();
+        unlockInside();
       
       if(outsideLock)
         unlockOutside();
@@ -216,28 +288,30 @@ void loop() {
     break;
     case 2 :  // locked mode
       if(!insideLock || !outsideLock){
-        if(isAtEquilibrium()){
-          if(!outsideLock){
-            lockOutside();
-          }  
-          if(!outsideLock){
-            lockOutside();
-          }  
-        }
-          
-      }else{
-        // check unlikely case where the locks are locked but the door flap is not where it should be (not in betwwen the locks)
-        if(digitalRead(HALL_SENSOR) == LOW){
-          // hall sensor is not triggered
-          //makeNoise
-          Serial.println();
-        }
-
-      }
+        //if(isAtEquilibrium()){
         
+          if(!insideLock){
+            lockInside();
+          }  
+          if(!outsideLock){
+            lockOutside();
+          }  
+        //}
+      }    
+      // }else{
+      //   // check unlikely case where the locks are locked but the door flap is not where it should be (not in betwwen the locks)
+      //   if(digitalRead(HALL_SENSOR) == LOW){
+      //     // hall sensor is not triggered
+      //     //makeNoise
+      //     Serial.println("ERROR : flap not in betwwen the locks!");
+      //   }
+      // }
+      // Serial.print("outsideLock : ");
+      // Serial.print(outsideLock);
+      // Serial.print("lockInside : ");
+      // Serial.println(insideLock);
       
-
-
+        
     break;
     case 3 :  // inside lock mode
       if(!insideLock)
@@ -247,16 +321,23 @@ void loop() {
         unlockOutside();
     break;
     case 4 :  // outside lock mode
-      if(insideLock)
+      if(insideLock){
        unlockInside();
+       Serial.println("unlock inside");
+      }
       
-      if(!outsideLock)
+      if(!outsideLock){
         lockOutside();
+        Serial.println("unlock inside");
+      }
     break;
     case 5 :  // auto mode
       // check presence of pet tag
       if(checkBleTag()){
         Serial.println("{auto} : tag detected and authorized");
+        oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
+        OLED("tag detected");
+
 
         // unlock door
         unlockInside();
@@ -272,6 +353,7 @@ void loop() {
         // lock door
         lockInside();
         lockOutside();
+        oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
         
       }
 
