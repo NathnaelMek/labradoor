@@ -19,13 +19,13 @@ which is part of the real-time-clock (RTC)if esp goes to deep sleep.
 #define CUTOFF 70 // in -db for how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
 #define INSIDE_LOCK 14
 #define OUTSIDE_LOCK 13
-#define HALL_SENSOR 11
+#define HALL_SENSOR 15
 #define BUTTON 19
 #define NUM_MODES 5
 #define ECHO_USS 39
 #define TRIG_USS 34
-//#define OUTSIDE_SERVOPIN 18
-//#define INSIDE_SERVOPIN 23
+#define HALL_VCC 16
+
 
 #define SCREEN_WIDTH 128 // OLED width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED height, in pixels
@@ -81,10 +81,11 @@ void setup() {
   servo_inside.setPeriodHertz(50);      // Standard 50hz servo
   pinMode(BUTTON, INPUT_PULLUP);
   pinMode(HALL_SENSOR, INPUT_PULLUP);
+  pinMode(HALL_VCC, OUTPUT);
   BLEDevice::init("ESP32_labradoor");
   currentMode = 1;
   unlockInside();
-  unlockInside();
+  unlockOutside();
 
   delay(2000);         // wait two seconds for initializing
   oled.clearDisplay(); // clear display
@@ -153,17 +154,20 @@ bool isAtEquilibrium(){
     // wait for 3 seconds before declaring the the door is not swinging
     unsigned long start = millis();
     unsigned long current = millis();
+    digitalWrite(HALL_VCC, HIGH);
     while (digitalRead(HALL_SENSOR) == LOW)
     {
+      
       current = millis();
       delay(10);
       if((current - start) > 3000){
         Serial.println("at equilibrium!");
+        OLED("at equilibrium!");
         return true;
       }
         //loop for 3 seonds
     }
-
+    digitalWrite(HALL_VCC, LOW);
     return false;
 
 }
@@ -274,29 +278,33 @@ void loop() {
   servo_outside.attach(OUTSIDE_SERVOPIN, minUs, maxUs);
   if(digitalRead(BUTTON) == LOW)
     modeButtonPressed();
+
+
   
   // check what mode is selected and perform action   
   switch(currentMode){
 
     case 1 : // unlocked mode
+      
       if(insideLock)
         unlockInside();
       
       if(outsideLock)
         unlockOutside();
-
+      
     break;
     case 2 :  // locked mode
       if(!insideLock || !outsideLock){
-        //if(isAtEquilibrium()){
+        if(isAtEquilibrium()){
         
           if(!insideLock){
             lockInside();
           }  
+        }
           if(!outsideLock){
             lockOutside();
           }  
-        //}
+        
       }    
       // }else{
       //   // check unlikely case where the locks are locked but the door flap is not where it should be (not in betwwen the locks)
@@ -314,22 +322,26 @@ void loop() {
         
     break;
     case 3 :  // inside lock mode
+    if(isAtEquilibrium())
       if(!insideLock)
         lockInside();
       
       if(outsideLock)
         unlockOutside();
+    
     break;
     case 4 :  // outside lock mode
-      if(insideLock){
-       unlockInside();
-       Serial.println("unlock inside");
-      }
-      
-      if(!outsideLock){
+
+    if(isAtEquilibrium())
+      if(!outsideLock)
         lockOutside();
-        Serial.println("unlock inside");
-      }
+
+      if(insideLock)
+       unlockInside();
+     
+      
+
+        
     break;
     case 5 :  // auto mode
       // check presence of pet tag
@@ -344,15 +356,15 @@ void loop() {
         unlockOutside();    
 
         // wait for 5 seconds so that dog can pass through
-        delay(5000);
+        delay(3000);
         // the check for door equilibrim
-        //while(!isAtEquilibrium()){
+        while(!isAtEquilibrium()){
 
-        //}
-
+        }
         // lock door
         lockInside();
         lockOutside();
+        delay(5000); // wait for dog to get away from the door
         oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
         
       }
