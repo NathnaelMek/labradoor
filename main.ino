@@ -21,7 +21,7 @@ which is part of the real-time-clock (RTC)if esp goes to deep sleep.
 #define OUTSIDE_LOCK 13
 #define HALL_SENSOR 15
 #define BUTTON 19
-#define NUM_MODES 5
+#define NUM_MODES 5 // how many modes we want the user to select from
 #define ECHO_USS 39
 #define TRIG_USS 34
 #define HALL_VCC 16
@@ -84,10 +84,12 @@ void setup() {
   pinMode(HALL_VCC, OUTPUT);
   BLEDevice::init("ESP32_labradoor");
   currentMode = 1;
+
+  // unlock both lock when booting from power off (no states exist yet so default to unlocked mode)
   unlockInside();
   unlockOutside();
 
-  delay(2000);         // wait two seconds for initializing
+  // display booting message
   oled.clearDisplay(); // clear display
   oled.setTextColor(WHITE);    // set text color
   oled.setCursor(0, 20);       // set position to display
@@ -97,8 +99,6 @@ void setup() {
   oled.display();              // display on OLED
   delay(2000);
   oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
-
-
 
 }
 
@@ -149,26 +149,34 @@ void OLED (String text, int size = 2, int x = 0, int y = 20){
   delay(500);         // wait two seconds for initializing
 }
 
+
+// checks with the hall sensor to see if gate is in equiibrium position
+// wait for 3 seconds before declaring the the door is not swinging
 bool isAtEquilibrium(){
-    // checks with the hall sensor to see if gate is in equiibrium position
-    // wait for 3 seconds before declaring the the door is not swinging
-    unsigned long start = millis();
-    unsigned long current = millis();
-    digitalWrite(HALL_VCC, HIGH);
-    while (digitalRead(HALL_SENSOR) == LOW)
-    {
-      
-      current = millis();
-      delay(10);
-      if((current - start) > 3000){
-        Serial.println("at equilibrium!");
-        OLED("at equilibrium!");
-        return true;
-      }
-        //loop for 3 seonds
+
+  //start timer
+  unsigned long start = millis();
+  unsigned long current = millis();
+
+  // turnon power for the Hall sensor switch
+  // power to the swtich is connected to a gpio pin so that we can save power 
+  digitalWrite(HALL_VCC, HIGH);
+
+  
+  while (digitalRead(HALL_SENSOR) == LOW)
+  {
+    
+    current = millis();
+    delay(10);
+    if((current - start) > 3000){
+      Serial.println("at equilibrium!");
+      OLED("at equilibrium!");
+      return true;
     }
-    digitalWrite(HALL_VCC, LOW);
-    return false;
+      //loop for 3 seonds
+  }
+  digitalWrite(HALL_VCC, LOW);
+  return false;
 
 }
 
@@ -227,7 +235,7 @@ void modeButtonPressed(){
     currentMillis = millis();
     delay(10); // for improved performance. neglagible delay
     
-    // if button is pressed again before the timer ends, cycle to the next choice and add 3 seconds
+    // if button is pressed again before the timer ends, cycle to the next choice and add 5 seconds
     if(digitalRead(BUTTON) == LOW){
         // wait for button release
       while(digitalRead(BUTTON) == LOW){
@@ -251,13 +259,13 @@ void modeButtonPressed(){
     if ((currentMillis - startMillis) >= period)  //test whether the period has elapsed
     {
       oled.clearDisplay(); // clear display
-      oled.setTextColor(WHITE);    // set text color
-      oled.setCursor(0, 20);       // set position to display
+      oled.setTextColor(WHITE);// set text color
+      oled.setCursor(0, 20);// set position to display
       oled.setTextSize(1); 
       oled.println ("mode selected : ");
       oled.setTextSize(2); 
       oled.println (modeNames[currentMode-1]);
-      oled.display();              // display on OLED
+      oled.display();// display on OLED
       delay(1500);
 
       //OLED("diplay shutting off", 1);
@@ -300,10 +308,11 @@ void loop() {
           if(!insideLock){
             lockInside();
           }  
-        }
+        
           if(!outsideLock){
             lockOutside();
           }  
+        }
         
       }    
       // }else{
@@ -349,6 +358,9 @@ void loop() {
         Serial.println("{auto} : tag detected and authorized");
         oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
         OLED("tag detected");
+        delay(2000);
+        oled.clearDisplay();
+        oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
 
 
         // unlock door
@@ -356,7 +368,7 @@ void loop() {
         unlockOutside();    
 
         // wait for 5 seconds so that dog can pass through
-        delay(3000);
+        delay(2000);
         // the check for door equilibrim
         while(!isAtEquilibrium()){
 
@@ -364,23 +376,13 @@ void loop() {
         // lock door
         lockInside();
         lockOutside();
-        delay(5000); // wait for dog to get away from the door
-        oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
-        
+        delay(2000); // wait for dog to get away from the door
       }
-
-
 
     break;
     case 6 :  // auto + weather mode
 
     break;
     
-
-    
-
-
-
-  
   } 
 }
