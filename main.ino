@@ -220,10 +220,12 @@ void wakeDisplay(Adafruit_SSD1306* display) {
 // be able to cycle trough the modes with one button
 void modeButtonPressed(){
  
-  oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
+  oled.ssd1306_command(SSD1306_DISPLAYON);//display on
+
   Serial.print ("{OLED screen} : "); // DEBUGGING
   Serial.println (modeNames[currentMode-1]);// DEBUGGING
   Serial.println ("5 second timer loop started");// DEBUGGING
+
   OLED("MODE:\n" + modeNames[currentMode-1], 1);
   
   while(digitalRead(BUTTON) == LOW){
@@ -260,16 +262,13 @@ void modeButtonPressed(){
     {
       oled.clearDisplay(); // clear display
       oled.setTextColor(WHITE);// set text color
-      oled.setCursor(0, 20);// set position to display
-      oled.setTextSize(1); 
-      oled.println ("mode selected : ");
+      oled.setCursor(0, 0);// set position to display
+      oled.setTextSize(2); 
+      oled.println ("selected:");
       oled.setTextSize(2); 
       oled.println (modeNames[currentMode-1]);
       oled.display();// display on OLED
       delay(1500);
-
-      //OLED("diplay shutting off", 1);
-      //delay(1000);
       oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
       return;
     }
@@ -363,16 +362,16 @@ void loop() {
         oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
 
 
+        // also check which side the pet is comming from using the presence sensors
+
+
         // unlock door
         unlockInside();
         unlockOutside();    
 
-        // wait for 5 seconds so that dog can pass through
-        delay(2000);
         // the check for door equilibrim
-        while(!isAtEquilibrium()){
+        while(!isAtEquilibrium());
 
-        }
         // lock door
         lockInside();
         lockOutside();
