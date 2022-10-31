@@ -4,6 +4,8 @@ which is part of the real-time-clock (RTC)if esp goes to deep sleep.
  becuase deep sleep erases data from RAM and anything we want to preserve neeeds to be in 
 */
 
+
+
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
@@ -17,14 +19,18 @@ which is part of the real-time-clock (RTC)if esp goes to deep sleep.
 #define DOORDELAY 2000 // milliseconds
 #define BLE_TAG_NAME "Labradoor tag 1"
 #define CUTOFF 70 // in -db for how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
-#define INSIDE_LOCK 14
-#define OUTSIDE_LOCK 13
 #define HALL_SENSOR 15
-#define BUTTON 19
+#define BUTTON 25
 #define NUM_MODES 5 // how many modes we want the user to select from
 #define ECHO_USS 39
 #define TRIG_USS 34
 #define HALL_VCC 16
+
+//pin used to shutdown time of flight sensor 
+//By default it's pulled high. When the pin is pulled low, 
+//the sensor goes into shutdown mode.
+#define VL53L0X_SHUTDOWN 6 
+
 
 
 #define SCREEN_WIDTH 128 // OLED width,  in pixels
@@ -39,8 +45,10 @@ Servo servo_inside;
 // Published values for SG90 servos; adjust if needed
 int minUs = 500;
 int maxUs = 2500;
-int OUTSIDE_SERVOPIN = 18;
-int INSIDE_SERVOPIN = 23;
+int OUTSIDE_SERVOPIN = 32;
+int INSIDE_SERVOPIN = 33;
+
+boolean interrupt_check = false; 
 
 
 
@@ -220,15 +228,13 @@ void wakeDisplay(Adafruit_SSD1306* display) {
 // be able to cycle trough the modes with one button
 void modeButtonPressed(){
  
-  oled.ssd1306_command(SSD1306_DISPLAYON);//display on
-
+  oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
   Serial.print ("{OLED screen} : "); // DEBUGGING
   Serial.println (modeNames[currentMode-1]);// DEBUGGING
   Serial.println ("5 second timer loop started");// DEBUGGING
-
   OLED("MODE:\n" + modeNames[currentMode-1], 1);
   
-  while(digitalRead(BUTTON) == LOW){
+  while(digitalRead(BUTTON) == HIGH){
     ;// wait until the button press is released
   }
   
@@ -238,16 +244,16 @@ void modeButtonPressed(){
     delay(10); // for improved performance. neglagible delay
     
     // if button is pressed again before the timer ends, cycle to the next choice and add 5 seconds
-    if(digitalRead(BUTTON) == LOW){
+    if(digitalRead(BUTTON) == HIGH){
         // wait for button release
-      while(digitalRead(BUTTON) == LOW){
+      while(digitalRead(BUTTON) == HIGH){
         ;// wait until the button press is released
       }
         // if button is pressed
         startMillis = millis();
         delay(10);
         currentMillis = millis();
-        Serial.println("timer reset");// DEBUGGING
+        //Serial.println("timer reset");// DEBUGGING
         
         
         if(currentMode == NUM_MODES){
@@ -256,19 +262,23 @@ void modeButtonPressed(){
           currentMode = (currentMode + 1);
         }
         OLED (modeNames[currentMode-1]);
+        Serial.println(modeNames[currentMode-1]);
     }
 
     if ((currentMillis - startMillis) >= period)  //test whether the period has elapsed
     {
       oled.clearDisplay(); // clear display
       oled.setTextColor(WHITE);// set text color
-      oled.setCursor(0, 0);// set position to display
-      oled.setTextSize(2); 
-      oled.println ("selected:");
+      oled.setCursor(0, 20);// set position to display
+      oled.setTextSize(1); 
+      oled.println ("mode selected : ");
       oled.setTextSize(2); 
       oled.println (modeNames[currentMode-1]);
       oled.display();// display on OLED
       delay(1500);
+
+      //OLED("diplay shutting off", 1);
+      //delay(1000);
       oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
       return;
     }
@@ -278,12 +288,13 @@ void modeButtonPressed(){
 
 
 
+
 void loop() {
 
   // use mode button and presence sensor to wake ep32 from deepsleep once it is implemented
   servo_inside.attach(INSIDE_SERVOPIN, minUs, maxUs);
   servo_outside.attach(OUTSIDE_SERVOPIN, minUs, maxUs);
-  if(digitalRead(BUTTON) == LOW)
+  if(digitalRead(BUTTON) == HIGH)
     modeButtonPressed();
 
 
@@ -293,6 +304,7 @@ void loop() {
 
     case 1 : // unlocked mode
       
+      Serial.println ("unlocked mode");// DEBUGGING
       if(insideLock)
         unlockInside();
       
@@ -301,6 +313,7 @@ void loop() {
       
     break;
     case 2 :  // locked mode
+    Serial.println ("locked mode");
       if(!insideLock || !outsideLock){
         if(isAtEquilibrium()){
         
@@ -330,6 +343,7 @@ void loop() {
         
     break;
     case 3 :  // inside lock mode
+    Serial.println (" inside locked mode");
     if(isAtEquilibrium())
       if(!insideLock)
         lockInside();
@@ -339,7 +353,7 @@ void loop() {
     
     break;
     case 4 :  // outside lock mode
-
+    Serial.println ("outside locked mode");
     if(isAtEquilibrium())
       if(!outsideLock)
         lockOutside();
@@ -351,7 +365,9 @@ void loop() {
 
         
     break;
+    Serial.println ("auto mode");
     case 5 :  // auto mode
+      // check
       // check presence of pet tag
       if(checkBleTag()){
         Serial.println("{auto} : tag detected and authorized");
@@ -362,16 +378,16 @@ void loop() {
         oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
 
 
-        // also check which side the pet is comming from using the presence sensors
-
-
         // unlock door
         unlockInside();
         unlockOutside();    
 
+        // wait for 5 seconds so that dog can pass through
+        delay(2000);
         // the check for door equilibrim
-        while(!isAtEquilibrium());
-
+        while(!isAtEquilibrium()){
+            
+        }
         // lock door
         lockInside();
         lockOutside();
