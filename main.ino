@@ -16,6 +16,7 @@ which is part of the real-time-clock (RTC)if esp goes to deep sleep.
 #include <ESP32Servo.h>
 
 #define DOOROPENTIME 3000 //in milliseconds
+#define DOORSTUCKTIME 100000 //in milliseconds
 #define DOORDELAY 2000 // milliseconds
 #define BLE_TAG_NAME "Labradoor tag 1"
 #define CUTOFF 70 // in -db for how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
@@ -61,6 +62,7 @@ boolean outsideLock;
 unsigned long startMillis;
 unsigned long currentMillis;
 const unsigned long period  = 5000;// 5 seconds
+const unsigned long period2  = 10000;// 5 seconds
 
 /* modes
     1 unlocked  : both locks are unlocked and door is open.s 
@@ -286,6 +288,58 @@ void modeButtonPressed(){
   }
 }
 
+/* 
+[not finished yet]
+
+wait for dog to get away from the door
+use the ble RSSI signal strength to measure a decrease in signal strength, which
+indicates the pet is away from the door. use CUTOFF RSSI value as threshold
+*/
+void waitForPet(){
+  // scan and pause for a 500 milli seconds
+  BLEScan *scan;
+  oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
+  oled.clearDisplay(); // clear display
+  oled.setTextColor(WHITE);// set text color
+  oled.setCursor(0, 20);// set position to display
+  oled.setTextSize(1); 
+  oled.println ("waiting for tag to get further away from the door");
+  oled.display();// display on OLED
+  boolean tagFound = false;
+
+  while(true){
+    delay(500);
+    scan = BLEDevice::getScan();
+    scan->setActiveScan(true);
+    BLEScanResults results = scan->start(1);
+    for (int i = 0; i < results.getCount(); i++) {
+      BLEAdvertisedDevice device = results.getDevice(i);
+      int rssi = device.getRSSI();
+      String tag_name = device.getName().c_str();
+      if (tag_name.equals(BLE_TAG_NAME) ) {
+        tagFound = true;
+        delay(100);
+        // check how stron the bluetooth signal is. we want to trigger the gate when the signal is "strong" enough
+        // signal stregth is directy proportional to distance. we can play around and find the suitable cutoff
+        if (CUTOFF < abs(rssi)){
+
+        }
+        else{
+          continue;
+        }
+        
+        
+      }
+    }
+
+  }
+  oled.clearDisplay(); // clear display
+  oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
+
+
+
+}
+
 
 
 
@@ -360,17 +414,14 @@ void loop() {
 
       if(insideLock)
        unlockInside();
-     
-      
-
-        
+          
     break;
-    Serial.println ("auto mode");
+    
     case 5 :  // auto mode
-      // check
+      Serial.println ("auto mode");
       // check presence of pet tag
       if(checkBleTag()){
-        Serial.println("{auto} : tag detected and authorized");
+        Serial.println("{auto} : tag detected and authorized"); // Debug
         oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
         OLED("tag detected");
         delay(2000);
@@ -382,16 +433,26 @@ void loop() {
         unlockInside();
         unlockOutside();    
 
-        // wait for 5 seconds so that dog can pass through
+        // wait for 2 seconds so that dog can pass through
         delay(2000);
         // the check for door equilibrim
+        startMillis = millis();
+        delay(10);
         while(!isAtEquilibrium()){
-            
+        // if door is stuck for more than 10 seconds, show error on OLED
+        currentMillis = millis(); 
+
+
+
+
         }
         // lock door
         lockInside();
         lockOutside();
-        delay(2000); // wait for dog to get away from the door
+
+
+        waitForPet();
+
       }
 
     break;
