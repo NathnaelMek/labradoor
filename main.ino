@@ -180,7 +180,7 @@ bool isAtEquilibrium(){
     delay(10);
     if((current - start) > 3000){
       Serial.println("at equilibrium!");
-      OLED("at equilibrium!");
+      //OLED("at equilibrium!");
       return true;
     }
       //loop for 3 seonds
@@ -218,13 +218,7 @@ bool checkBleTag(){
   }
   return false;
 }
-void sleepDisplay(Adafruit_SSD1306* display) {
-  display->ssd1306_command(SSD1306_DISPLAYOFF);
-}
 
-void wakeDisplay(Adafruit_SSD1306* display) {
-  display->ssd1306_command(SSD1306_DISPLAYON);
-}
 
 
 // be able to cycle trough the modes with one button
@@ -303,7 +297,7 @@ void waitForPet(){
   oled.setTextColor(WHITE);// set text color
   oled.setCursor(0, 20);// set position to display
   oled.setTextSize(1); 
-  oled.println ("waiting for tag to get further away from the door");
+  oled.println ("waiting for pet to move");
   oled.display();// display on OLED
   boolean tagFound = false;
 
@@ -319,29 +313,34 @@ void waitForPet(){
       if (tag_name.equals(BLE_TAG_NAME) ) {
         tagFound = true;
         delay(100);
-        // check how stron the bluetooth signal is. we want to trigger the gate when the signal is "strong" enough
+        // check how strong the bluetooth signal is. we want to trigger the gate when the signal is "strong" enough
         // signal stregth is directy proportional to distance. we can play around and find the suitable cutoff
         if (CUTOFF < abs(rssi)){
-
+          Serial.print("rssi = ");
+          Serial.print(rssi);
+          Serial.println("tag was found but it is far way enough so dont wait for dog");
+          return;
         }
-        else{
-          continue;
-        }
-        
-        
       }
     }
+    if(tagFound){
+      continue;
+    }else{
+      // the tag was not near enough to the esp32 to be picked up by the bluetooth
+      // so that means either the pet is far away from the gate or the BLE tag has run
+      // out of power. either way, now it is ok to lock the door.
+      Serial.println("tag was not found so assume the dog is away from the door");
+      return;
 
+    }
   }
   oled.clearDisplay(); // clear display
   oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
-
-
-
 }
 
-
-
+boolean isDoorStuck(){
+  return false;
+}
 
 void loop() {
 
@@ -381,18 +380,6 @@ void loop() {
         }
         
       }    
-      // }else{
-      //   // check unlikely case where the locks are locked but the door flap is not where it should be (not in betwwen the locks)
-      //   if(digitalRead(HALL_SENSOR) == LOW){
-      //     // hall sensor is not triggered
-      //     //makeNoise
-      //     Serial.println("ERROR : flap not in betwwen the locks!");
-      //   }
-      // }
-      // Serial.print("outsideLock : ");
-      // Serial.print(outsideLock);
-      // Serial.print("lockInside : ");
-      // Serial.println(insideLock);
       
         
     break;
@@ -439,22 +426,38 @@ void loop() {
         startMillis = millis();
         delay(10);
         while(!isAtEquilibrium()){
-        // if door is stuck for more than 10 seconds, show error on OLED
-        currentMillis = millis(); 
+          // if door is stuck for more than 10 seconds, show error on OLED
+          currentMillis = millis(); 
 
+          if((currentMillis - startMillis) >= period2){
+            // it has been 10 seconds. display error : gate stuck on OLED
+            oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
+            oled.clearDisplay(); // clear display
+            oled.setTextColor(WHITE);// set text color
+            oled.setCursor(0, 20);// set position to display
+            oled.setTextSize(2); 
+            oled.println ("DOOR STUCK!");
+            oled.display();// display on OLED
 
-
-
+            // blink for 3 seconds
+            delay(1000);
+            oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
+            delay(1000);
+            oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
+            delay(1000);
+            oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
+          }
         }
+
+        waitForPet();
+
+
         // lock door
         lockInside();
         lockOutside();
 
-
-        waitForPet();
-
+        
       }
-
     break;
     case 6 :  // auto + weather mode
 
