@@ -72,7 +72,7 @@ const unsigned long period2  = 10000;// 5 seconds
     6 auto lock + weather : always locked (streatch goal)
 */
 int currentMode;
-String modeNames [] = {"unlocked", "locked", "inside lock", "outside lock", "auto lock", "auto + weather"};
+String modeNames [] = {"unlocked", "locked", "inside    lock", "outside   lock", "auto lock", "auto + weather"};
 
 
 void setup() {
