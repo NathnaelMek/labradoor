@@ -71,7 +71,6 @@ const unsigned long period2  = 10000;// 5 seconds
 */
 int currentMode;
 String modeNames [] = {"unlocked", "locked", "inside    lock", "outside   lock", "auto lock", "auto + weather"};
-String modeNames [] = {"unlocked", "locked", "inside    lock", "outside   lock", "auto lock", "auto + weather"};
 
 void IRAM_ATTR ISR() {
   ets_printf("ISR called\n");
