@@ -15,9 +15,7 @@ which is part of the real-time-clock (RTC)if esp goes to deep sleep.
 #include <Adafruit_SSD1306.h>
 #include <ESP32Servo.h>
 
-#define DOOROPENTIME 3000 //in milliseconds
-#define DOORSTUCKTIME 100000 //in milliseconds
-#define DOORDELAY 2000 // milliseconds
+
 #define BLE_TAG_NAME "Labradoor tag 1"
 #define CUTOFF 75 // in -db for how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
 #define HALL_SENSOR 15
@@ -49,7 +47,7 @@ int maxUs = 2500;
 int OUTSIDE_SERVOPIN = 33;
 int INSIDE_SERVOPIN = 32;
 
-boolean interrupt_check = false; 
+boolean button_pressed = false; 
 
 
 
@@ -60,7 +58,7 @@ boolean insideLock;
 boolean outsideLock;
 
 
-const unsigned long period  = 5000;// 5 seconds
+const unsigned long period  = 3000;// 5 seconds
 const unsigned long period2  = 10000;// 5 seconds
 
 /* modes
@@ -72,13 +70,15 @@ const unsigned long period2  = 10000;// 5 seconds
     6 auto lock + weather : always locked (streatch goal)
 */
 int currentMode;
-String modeNames [] = {"unlocked", "locked", "inside lock", "outside lock", "auto lock", "auto + weather"};
+String modeNames [] = {"unlocked", "locked", "inside    lock", "outside   lock", "auto lock", "auto + weather"};
 
 void IRAM_ATTR ISR() {
-  Serial.println("ISR called");
-  modeButtonPressed();
+  ets_printf("ISR called\n");
+  button_pressed = true;
+  //modeButtonPressed();
 }
 void setup() {
+  
   // put your setup code here, to run once:
   Serial.begin(9600);
   // initialize OLED display with I2C address 0x3C
@@ -93,7 +93,8 @@ void setup() {
   servo_outside.attach(OUTSIDE_SERVOPIN, minUs, maxUs);
 	servo_outside.setPeriodHertz(50);      // Standard 50hz servo
   servo_inside.setPeriodHertz(50);      // Standard 50hz servo
-  pinMode(BUTTON, INPUT_PULLUP);
+  pinMode(BUTTON, INPUT);
+  attachInterrupt(digitalPinToInterrupt(BUTTON), ISR, FALLING);
   pinMode(HALL_SENSOR, INPUT_PULLUP);
   pinMode(HALL_VCC, OUTPUT);
   BLEDevice::init("ESP32_labradoor");
@@ -113,7 +114,7 @@ void setup() {
   oled.display();              // display on OLED
   delay(2000);
   oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
-  attachInterrupt(BUTTON, ISR, FALLING);
+  
 
 }
 
@@ -230,6 +231,7 @@ bool checkBleTag(){
 void modeButtonPressed(){
 
   detachInterrupt(BUTTON);
+  button_pressed = false;
   unsigned long startMillis;
   unsigned long currentMillis;
   oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
@@ -281,7 +283,7 @@ void modeButtonPressed(){
       //OLED("diplay shutting off", 1);
       //delay(1000);
       oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
-      attachInterrupt(BUTTON, ISR, FALLING);
+      attachInterrupt(digitalPinToInterrupt(BUTTON), ISR, FALLING);
       return;
     }
 
@@ -356,8 +358,9 @@ void loop() {
   // use mode button and presence sensor to wake ep32 from deepsleep once it is implemented
   servo_inside.attach(INSIDE_SERVOPIN, minUs, maxUs);
   servo_outside.attach(OUTSIDE_SERVOPIN, minUs, maxUs);
-  //if(digitalRead(BUTTON) == HIGH)
-    //modeButtonPressed();
+  if(button_pressed)
+    modeButtonPressed();
+    
 
 
   
@@ -440,7 +443,7 @@ void loop() {
         unsigned long currentMillis;
         startMillis = millis();
         delay(10);
-        while(!isAtEquilibrium()){
+        while(!isAtEquilibrium() && !(button_pressed)){
           // if door is stuck for more than 10 seconds, show error on OLED
           currentMillis = millis(); 
 
