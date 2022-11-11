@@ -19,7 +19,7 @@ which is part of the real-time-clock (RTC)if esp goes to deep sleep.
 #define DOORSTUCKTIME 100000 //in milliseconds
 #define DOORDELAY 2000 // milliseconds
 #define BLE_TAG_NAME "Labradoor tag 1"
-#define CUTOFF 70 // in -db for how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
+#define CUTOFF 75 // in -db for how strong BLE beacon RSSI signal needs to be (ie RSSI reading threshold)
 #define HALL_SENSOR 15
 #define BUTTON 25
 #define NUM_MODES 5 // how many modes we want the user to select from
@@ -59,8 +59,7 @@ boolean presenseDetected; // see if there is omething ifront of the gate. to wak
 boolean insideLock; 
 boolean outsideLock;
 
-unsigned long startMillis;
-unsigned long currentMillis;
+
 const unsigned long period  = 5000;// 5 seconds
 const unsigned long period2  = 10000;// 5 seconds
 
@@ -78,7 +77,7 @@ String modeNames [] = {"unlocked", "locked", "inside lock", "outside lock", "aut
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(115200);
+  Serial.begin(9600);
   // initialize OLED display with I2C address 0x3C
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("failed to start SSD1306 OLED"));
@@ -223,7 +222,8 @@ bool checkBleTag(){
 
 // be able to cycle trough the modes with one button
 void modeButtonPressed(){
- 
+  unsigned long startMillis;
+  unsigned long currentMillis;
   oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
   Serial.print ("{OLED screen} : "); // DEBUGGING
   Serial.println (modeNames[currentMode-1]);// DEBUGGING
@@ -319,6 +319,8 @@ void waitForPet(){
           Serial.print("rssi = ");
           Serial.print(rssi);
           Serial.println("tag was found but it is far way enough so dont wait for dog");
+          oled.clearDisplay(); // clear display
+          oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
           return;
         }
       }
@@ -330,12 +332,13 @@ void waitForPet(){
       // so that means either the pet is far away from the gate or the BLE tag has run
       // out of power. either way, now it is ok to lock the door.
       Serial.println("tag was not found so assume the dog is away from the door");
+      oled.clearDisplay(); // clear display
+      oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
       return;
 
     }
   }
-  oled.clearDisplay(); // clear display
-  oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
+
 }
 
 boolean isDoorStuck(){
@@ -385,8 +388,8 @@ void loop() {
     break;
     case 3 :  // inside lock mode
     Serial.println (" inside locked mode");
-    if(isAtEquilibrium())
-      if(!insideLock)
+    if(!insideLock)
+      if(isAtEquilibrium())
         lockInside();
       
       if(outsideLock)
@@ -395,8 +398,8 @@ void loop() {
     break;
     case 4 :  // outside lock mode
     Serial.println ("outside locked mode");
-    if(isAtEquilibrium())
-      if(!outsideLock)
+    if(!outsideLock)
+      if(isAtEquilibrium())
         lockOutside();
 
       if(insideLock)
@@ -406,6 +409,10 @@ void loop() {
     
     case 5 :  // auto mode
       Serial.println ("auto mode");
+      if(!insideLock)
+        lockInside();
+      if(!outsideLock)
+        lockOutside();
       // check presence of pet tag
       if(checkBleTag()){
         Serial.println("{auto} : tag detected and authorized"); // Debug
@@ -420,9 +427,11 @@ void loop() {
         unlockInside();
         unlockOutside();    
 
-        // wait for 2 seconds so that dog can pass through
-        delay(2000);
+        // wait for 1 second so that dog can pass through
+        delay(1000);
         // the check for door equilibrim
+        unsigned long startMillis;
+        unsigned long currentMillis;
         startMillis = millis();
         delay(10);
         while(!isAtEquilibrium()){
@@ -438,23 +447,14 @@ void loop() {
             oled.setTextSize(2); 
             oled.println ("DOOR STUCK!");
             oled.display();// display on OLED
-
             // blink for 3 seconds
             delay(1000);
-            oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
-            delay(1000);
             oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
-            delay(1000);
-            oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
           }
         }
 
         waitForPet();
 
-
-        // lock door
-        lockInside();
-        lockOutside();
 
         
       }
