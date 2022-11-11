@@ -46,8 +46,8 @@ Servo servo_inside;
 // Published values for SG90 servos; adjust if needed
 int minUs = 500;
 int maxUs = 2500;
-int OUTSIDE_SERVOPIN = 32;
-int INSIDE_SERVOPIN = 33;
+int OUTSIDE_SERVOPIN = 33;
+int INSIDE_SERVOPIN = 32;
 
 boolean interrupt_check = false; 
 
@@ -74,7 +74,10 @@ const unsigned long period2  = 10000;// 5 seconds
 int currentMode;
 String modeNames [] = {"unlocked", "locked", "inside lock", "outside lock", "auto lock", "auto + weather"};
 
-
+void IRAM_ATTR ISR() {
+  Serial.println("ISR called");
+  modeButtonPressed();
+}
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
@@ -83,6 +86,8 @@ void setup() {
     Serial.println(F("failed to start SSD1306 OLED"));
     while (1);
   }
+
+
 
   servo_inside.attach(INSIDE_SERVOPIN, minUs, maxUs);
   servo_outside.attach(OUTSIDE_SERVOPIN, minUs, maxUs);
@@ -108,6 +113,7 @@ void setup() {
   oled.display();              // display on OLED
   delay(2000);
   oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
+  attachInterrupt(BUTTON, ISR, FALLING);
 
 }
 
@@ -222,17 +228,16 @@ bool checkBleTag(){
 
 // be able to cycle trough the modes with one button
 void modeButtonPressed(){
+
+  detachInterrupt(BUTTON);
   unsigned long startMillis;
   unsigned long currentMillis;
   oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
   Serial.print ("{OLED screen} : "); // DEBUGGING
   Serial.println (modeNames[currentMode-1]);// DEBUGGING
   Serial.println ("5 second timer loop started");// DEBUGGING
+  oled.clearDisplay(); // clear display
   OLED("MODE:\n" + modeNames[currentMode-1], 1);
-  
-  while(digitalRead(BUTTON) == HIGH){
-    ;// wait until the button press is released
-  }
   
   startMillis = millis();
   while(true){
@@ -276,6 +281,7 @@ void modeButtonPressed(){
       //OLED("diplay shutting off", 1);
       //delay(1000);
       oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
+      attachInterrupt(BUTTON, ISR, FALLING);
       return;
     }
 
@@ -350,8 +356,8 @@ void loop() {
   // use mode button and presence sensor to wake ep32 from deepsleep once it is implemented
   servo_inside.attach(INSIDE_SERVOPIN, minUs, maxUs);
   servo_outside.attach(OUTSIDE_SERVOPIN, minUs, maxUs);
-  if(digitalRead(BUTTON) == HIGH)
-    modeButtonPressed();
+  //if(digitalRead(BUTTON) == HIGH)
+    //modeButtonPressed();
 
 
   
