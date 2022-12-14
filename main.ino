@@ -426,7 +426,7 @@ void loop() {
       if(checkBleTag()){
         Serial.println("{auto} : tag detected and authorized"); // Debug
         oled.ssd1306_command(SSD1306_DISPLAYON);//display off to save power
-        OLED("tag detected");
+        OLED("tag       detected");
         delay(2000);
         oled.clearDisplay();
         oled.ssd1306_command(SSD1306_DISPLAYOFF);//display off to save power
